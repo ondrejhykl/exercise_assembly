@@ -1,3 +1,9 @@
+from Bio import SeqIO
+from collections import Counter
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
+
+
 def in_out_degree(graph):
     in_degree = {}
     out_degree = {}
@@ -234,11 +240,112 @@ def contigs(graph):
     return sorted(contig_paths)
 
 
-if __name__ == "__main__":
-    text = "ACGTAC"
-    kmers = kmer_composition(text, 3)
-    graph = debruijn_graph(kmers)
 
-    print("K-mers:", kmers)
-    print("Graph:", graph)
-    print("Contigs:", contigs(graph))
+if __name__ == "__main__":
+    reads = [
+        str(record.seq).upper()
+        for record in SeqIO.parse("reads.fasta", "fasta")
+    ]
+
+    spelled_strings = {}
+
+    for k in [9, 12, 13, 14, 21]:
+        kmers = sorted({
+            kmer
+            for read in reads
+            for kmer in kmer_composition(read, k)
+        })
+
+        graph = debruijn_graph(kmers)
+        edge_count = sum(len(neighbours) for neighbours in graph.values())
+        contig_list = contigs(graph)
+        contig_count = len(contig_list)
+
+        contig_edges = Counter()
+        for contig in contig_list:
+            contig_kmers = kmer_composition(contig, k)
+            edges = Counter(
+                zip(
+                    [km[:-1] for km in contig_kmers],
+                    [km[1:] for km in contig_kmers]
+                )
+            )
+
+            for edge, count in edges.items():
+                contig_edges[edge] += count
+
+        graph_edges = Counter(
+            (u, v)
+            for u, neighbours in graph.items()
+            for v in neighbours
+        )
+
+        print("\nContig edges correct:", contig_edges == graph_edges)
+
+        for contig in contig_list:
+            if not set(kmer_composition(contig, k)).issubset(set(kmers)):
+                print("Warning: contig contains an unexpected k-mer")
+
+        trimmed_contigs = [
+            contig[:-(k - 1)]
+            if contig[:k - 1] == contig[-(k - 1):]
+            else contig
+            for contig in contig_list
+        ]
+
+        longest_contig = max(map(len, trimmed_contigs), default=0)
+
+        kind = eulerian_type(graph, directed=True)
+        spelled = None
+        trimmed_spelled = None
+
+        if kind != "none":
+            walk = eulerian_path(graph)
+            spelled = spell_path(walk)
+
+            print(
+                "Spelled string length correct:",
+                len(spelled) == edge_count + k - 1
+            )
+            print(
+                "K-mer composition correct:",
+                set(kmer_composition(spelled, k)) == set(kmers)
+            )
+
+            if spelled[:k - 1] == spelled[-(k - 1):]:
+                trimmed_spelled = spelled[:-(k - 1)]
+            else:
+                trimmed_spelled = spelled
+
+            spelled_strings[k] = trimmed_spelled
+            record = SeqRecord(
+                Seq(trimmed_spelled),
+                id=f"assembly_k{k}",
+                description=f"Assembled genome for k={k}"
+            )
+
+            SeqIO.write(record, f"blast_k{k}.fasta", "fasta")
+
+        print(f"\nk = {k}")
+        print("|V|:", len(graph))
+        print("|E|:", edge_count)
+        print("Eulerian type:", kind)
+        print("Number of contigs:", contig_count)
+        print("Longest contig (trimmed):", longest_contig)
+        print(
+            "Spelled string length (trimmed):",
+            len(trimmed_spelled) if trimmed_spelled is not None else "-"
+        )
+
+        if trimmed_spelled is not None:
+            print("Trimmed spelled string:", trimmed_spelled)
+
+        print("Trimmed contigs:", trimmed_contigs)
+
+    print("\nDo all spelled strings describe the same circle?")
+
+    for k1, s in spelled_strings.items():
+        for k2, t in spelled_strings.items():
+            if k1 < k2:
+                same_circle = len(s) == len(t) and s in t + t
+                print(f"k={k1} vs k={k2}: {same_circle}")
