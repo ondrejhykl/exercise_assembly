@@ -121,10 +121,82 @@ def spell_path(nodes):
     return path
 
 
+def hierholzer(graph, start, verbose=False):
+    unused = {vertex: sorted(neighbours) for vertex, neighbours in graph.items()}
+
+    def make_walk(node):
+        walk = [node]
+
+        while unused[node]:
+            neighbour = unused[node].pop(0)
+            node = neighbour
+            walk.append(node)
+
+        return walk
+
+    walk = make_walk(start)
+
+    if verbose:
+        print("Walk 1:", walk)
+
+    walk_number = 1
+
+    while any(unused.values()):
+        restart_index = None
+
+        for i, node in enumerate(walk):
+            if unused[node]:
+                restart_index = i
+                break
+
+        if restart_index is None:
+            raise ValueError("Unused edges remain, but no restart node was found.")
+
+        restart_node = walk[restart_index]
+        new_walk = make_walk(restart_node)
+        walk_number += 1
+
+        if verbose:
+            print(f"Walk {walk_number}, restarted at {restart_node}:", new_walk)
+
+        walk = (
+            walk[:restart_index]
+            + new_walk
+            + walk[restart_index + 1:]
+        )
+
+        if verbose:
+            print("After splice:", walk)
+
+    return walk
+
+
+def eulerian_path(graph, verbose=False):
+    if eulerian_type(graph, directed=True) == "none":
+        raise ValueError("The graph has no Eulerian path.")
+
+    in_degree, out_degree = in_out_degree(graph)
+
+    start = min(graph)
+
+    for vertex in graph:
+        if out_degree[vertex] - in_degree[vertex] == 1:
+            start = vertex
+            break
+
+    return hierholzer(graph, start, verbose)
+
+
 if __name__ == "__main__":
-    print(kmer_composition("GATTACA", 4))
-    kmers = ["CAT", "ATC", "CAT"]
+    kmers = ["ACT", "AGC", "ATT", "CCG", "CGA", "CGT", "CTG", "GAC", "GAG", "GAT",
+             "GTC", "TCC", "TCG", "TGA", "TTC"]
+
     graph = debruijn_graph(kmers)
 
-    print(graph)
-    print(spell_path(["GAT", "ATT", "TTA"]))
+    print("Graph:", graph)
+    print("Eulerian type:", eulerian_type(graph, directed=True))
+
+    walk = eulerian_path(graph, verbose=True)
+
+    print("Final walk:", walk)
+    print("Reconstructed sequence:", spell_path(walk))
