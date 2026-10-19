@@ -187,16 +187,58 @@ def eulerian_path(graph, verbose=False):
     return hierholzer(graph, start, verbose)
 
 
-if __name__ == "__main__":
-    kmers = ["ACT", "AGC", "ATT", "CCG", "CGA", "CGT", "CTG", "GAC", "GAG", "GAT",
-             "GTC", "TCC", "TCG", "TGA", "TTC"]
+def contigs(graph):
+    in_degree, out_degree = in_out_degree(graph)
 
+    unused = {
+        vertex: sorted(neighbours)
+        for vertex, neighbours in graph.items()
+    }
+
+    contig_paths = []
+
+    starts = sorted(
+        vertex for vertex in graph
+        if in_degree[vertex] != 1 or out_degree[vertex] != 1
+    )
+
+    for start in starts:
+        while unused[start]:
+            path = [start]
+            current = unused[start].pop(0)
+            path.append(current)
+
+            while in_degree[current] == 1 and out_degree[current] == 1:
+                if not unused[current]:
+                    break
+
+                current = unused[current].pop(0)
+                path.append(current)
+
+            contig_paths.append(spell_path(path))
+
+    while any(unused.values()):
+        start = min(vertex for vertex in unused if unused[vertex])
+        path = [start]
+        current = start
+
+        while True:
+            current = unused[current].pop(0)
+            path.append(current)
+
+            if current == start:
+                break
+
+        contig_paths.append(spell_path(path))
+
+    return sorted(contig_paths)
+
+
+if __name__ == "__main__":
+    text = "ACGTAC"
+    kmers = kmer_composition(text, 3)
     graph = debruijn_graph(kmers)
 
+    print("K-mers:", kmers)
     print("Graph:", graph)
-    print("Eulerian type:", eulerian_type(graph, directed=True))
-
-    walk = eulerian_path(graph, verbose=True)
-
-    print("Final walk:", walk)
-    print("Reconstructed sequence:", spell_path(walk))
+    print("Contigs:", contigs(graph))
